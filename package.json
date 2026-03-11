@@ -1,7 +1,7 @@
 {
   "name": "gh-action-sirv",
   "description": "Upload directory to Sirv",
-  "version": "1.0",
+  "version": "1.1",
   "main": "index.js",
   "license": "MIT",
   "repository": "https://github.com/IgorVaryvoda/gh-action-sirv",
@@ -16,7 +16,7 @@
     "mime-types": "^2.1.26"
   },
   "devDependencies": {
-    "@zeit/ncc": "^0.21.1",
+    "@vercel/ncc": "^0.38.4",
     "prettier": "^1.19.1"
   },
   "prettier": {
