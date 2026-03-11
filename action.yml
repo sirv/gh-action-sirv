@@ -22,11 +22,37 @@ inputs:
     required: false
     default: false
     description: 'Delete files from Sirv if no longer present in repo'
+  deploy_mode:
+    required: false
+    default: direct
+    description: 'Deployment strategy: direct uploads to the live path, staged uploads to a release path and then promotes it'
+  verify:
+    required: false
+    default: manifest
+    description: 'Verification strategy after upload: none or manifest'
+  rollback_on_failure:
+    required: false
+    default: true
+    description: 'When staged cutover fails, restore the previous live folder'
+  max_concurrency:
+    required: false
+    default: '10'
+    description: 'Maximum number of concurrent Sirv operations'
+  max_retries:
+    required: false
+    default: '3'
+    description: 'Maximum number of retries per Sirv API call'
 outputs:
+  live_path:
+    description: 'Final live Sirv directory'
+  release_path:
+    description: 'Staged release directory when deploy_mode=staged'
+  backup_path:
+    description: 'Backup directory created from the previous live release'
   object_key:
-    description: 'object key'
+    description: 'Deprecated alias for live_path'
   object_locations:
-    description: 'object locations'
+    description: 'Deprecated alias for live_path'
 runs:
   using: 'node20'
   main: 'dist/index.js'
