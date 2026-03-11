@@ -360,3 +360,72 @@ test('manifest verification fails the run when Sirv is missing a file', async ()
 
   await assert.rejects(action.run(), /Manifest verification failed:\nMissing index\.html/);
 });
+
+test('manifest verification ignores Sirv placeholder content types like unknown', async () => {
+  const siteDir = createTempSite({
+    '.nojekyll': '',
+  });
+  const fileSize = fs.statSync(path.join(siteDir, '.nojekyll')).size;
+  const core = createCore();
+  const axios = createAxios(async (config) => {
+    if (config.url.endsWith('/token')) {
+      return { data: { token: 'token', expiresIn: 3600 } };
+    }
+
+    if (config.url.endsWith('/files/upload')) {
+      assert.equal(config.params.filename, '/docs/.nojekyll');
+      return { status: 200, data: {} };
+    }
+
+    if (config.url.endsWith('/files/stat')) {
+      return { data: {} };
+    }
+
+    if (config.url.endsWith('/files/readdir')) {
+      return {
+        data: {
+          contents: [
+            {
+              filename: '.nojekyll',
+              isDirectory: false,
+              size: String(fileSize),
+              contentType: 'unknown',
+            },
+          ],
+        },
+      };
+    }
+
+    throw new Error(`Unexpected request: ${config.method} ${config.url}`);
+  });
+
+  const action = createAction({
+    core,
+    path,
+    klawSync: listFiles,
+    lookup: lookupMimeType,
+    axios,
+    fs: {
+      ...fs,
+      createReadStream,
+    },
+    cwd: () => process.cwd(),
+    env: {},
+    now: () => new Date('2026-03-11T12:00:00.000Z'),
+    inputs: {
+      clientId: 'id',
+      clientSecret: 'secret',
+      source_dir: siteDir,
+      output_dir: '/docs',
+      purge: 'false',
+      deploy_mode: 'direct',
+      verify: 'manifest',
+      rollback_on_failure: 'true',
+      max_concurrency: '2',
+      max_retries: '1',
+    },
+  });
+
+  await action.run();
+  assert.equal(core.outputs.live_path, '/docs');
+});

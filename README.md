@@ -33,14 +33,22 @@ jobs:
       - uses: sirv/gh-action-sirv@v2
         id: sirv
         with:
-          clientId: ${{ secrets.SIRV_CLIENT_ID }}
-          clientSecret: ${{ secrets.SIRV_CLIENT_SECRET }}
+          clientId: ${{ secrets.clientId }}
+          clientSecret: ${{ secrets.clientSecret }}
           source_dir: build
           output_dir: /docs
           deploy_mode: staged
           verify: manifest
           rollback_on_failure: true
           purge: false
+```
+
+The action input names are still `clientId` and `clientSecret`, so older workflows using `secrets.clientId` and `secrets.clientSecret` continue to work. If your repo uses different secret names such as `SIRV_CLIENT_ID`, keep mapping them into those same action inputs:
+
+```yaml
+with:
+  clientId: ${{ secrets.SIRV_CLIENT_ID }}
+  clientSecret: ${{ secrets.SIRV_CLIENT_SECRET }}
 ```
 
 `staged` mode uploads to a path like `/docs.__releases/<release-id>`, verifies the uploaded files, renames the current live folder to `/docs.__backups/<release-id>`, and then promotes the staged release to `/docs`.

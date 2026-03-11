@@ -174,6 +174,11 @@ function createAction(deps) {
       .toLowerCase();
   }
 
+  function hasComparableMimeType(value) {
+    const normalized = normalizeMimeType(value);
+    return normalized !== '' && normalized !== 'unknown';
+  }
+
   function formatError(error) {
     if (error.response) {
       return `HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`;
@@ -449,7 +454,7 @@ function createAction(deps) {
       }
 
       if (
-        remoteFile.contentType &&
+        hasComparableMimeType(remoteFile.contentType) &&
         normalizeMimeType(remoteFile.contentType) !== normalizeMimeType(file.contentType)
       ) {
         problems.push(
