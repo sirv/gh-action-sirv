@@ -302,6 +302,135 @@ test('staged mode restores the backup when cutover fails', async () => {
   ]);
 });
 
+test('staged mode deploys to Sirv root by swapping top-level entries', async () => {
+  const siteDir = createTempSite({
+    '.nojekyll': '',
+    'assets/app.js': 'console.log("ok");',
+    'index.html': '<html>docs</html>',
+  });
+  const core = createCore();
+  const releaseId = 'abcdef123456-42-1-20260311120000000';
+  const releaseDir = `/.__releases/${releaseId}`;
+  const backupDir = `/.__backups/${releaseId}`;
+  const renameCalls = [];
+  const statResponses = new Map([
+    ['/', {}],
+    [releaseDir, {}],
+    ['/assets', {}],
+    ['/index.html', {}],
+    ['/.nojekyll', {}],
+  ]);
+  const indexSize = fs.statSync(path.join(siteDir, 'index.html')).size;
+  const assetSize = fs.statSync(path.join(siteDir, 'assets/app.js')).size;
+
+  const axios = createAxios(async (config) => {
+    if (config.url.endsWith('/token')) {
+      return { data: { token: 'token', expiresIn: 3600 } };
+    }
+
+    if (config.url.endsWith('/files/upload')) {
+      return { status: 200, data: {} };
+    }
+
+    if (config.url.endsWith('/files/stat')) {
+      if (statResponses.has(config.params.filename)) {
+        return { data: statResponses.get(config.params.filename) };
+      }
+
+      throw httpError(404, { message: 'Not found' });
+    }
+
+    if (config.url.endsWith('/files/readdir')) {
+      if (config.params.dirname === releaseDir) {
+        return {
+          data: {
+            contents: [
+              { filename: '.nojekyll', isDirectory: false, size: '0', contentType: 'unknown' },
+              { filename: 'assets', isDirectory: true },
+              { filename: 'index.html', isDirectory: false, size: String(indexSize), contentType: 'text/html' },
+            ],
+          },
+        };
+      }
+
+      if (config.params.dirname === `${releaseDir}/assets`) {
+        return {
+          data: {
+            contents: [
+              {
+                filename: 'app.js',
+                isDirectory: false,
+                size: String(assetSize),
+                contentType: 'application/javascript',
+              },
+            ],
+          },
+        };
+      }
+    }
+
+    if (config.url.endsWith('/files/mkdir')) {
+      assert.equal(config.params.dirname, '/.__backups');
+      statResponses.set('/.__backups', {});
+      return { status: 200, data: {} };
+    }
+
+    if (config.url.endsWith('/files/rename')) {
+      renameCalls.push([config.params.from, config.params.to]);
+      statResponses.delete(config.params.from);
+      statResponses.set(config.params.to, {});
+      return { status: 200, data: {} };
+    }
+
+    throw new Error(`Unexpected request: ${config.method} ${config.url}`);
+  });
+
+  const action = createAction({
+    core,
+    path,
+    klawSync: listFiles,
+    lookup: lookupMimeType,
+    axios,
+    fs: {
+      ...fs,
+      createReadStream,
+    },
+    cwd: () => process.cwd(),
+    env: {
+      GITHUB_SHA: 'abcdef1234567890',
+      GITHUB_RUN_ID: '42',
+      GITHUB_RUN_ATTEMPT: '1',
+    },
+    now: () => new Date('2026-03-11T12:00:00.000Z'),
+    inputs: {
+      clientId: 'id',
+      clientSecret: 'secret',
+      source_dir: siteDir,
+      output_dir: '/',
+      purge: 'false',
+      deploy_mode: 'staged',
+      verify: 'manifest',
+      rollback_on_failure: 'true',
+      max_concurrency: '2',
+      max_retries: '1',
+    },
+  });
+
+  await action.run();
+
+  assert.equal(core.outputs.live_path, '/');
+  assert.equal(core.outputs.backup_path, backupDir);
+  assert.ok(renameCalls.every(([from]) => from !== '/'));
+  assert.deepEqual(renameCalls, [
+    ['/.nojekyll', `${backupDir}/.nojekyll`],
+    ['/assets', `${backupDir}/assets`],
+    ['/index.html', `${backupDir}/index.html`],
+    [`${releaseDir}/.nojekyll`, '/.nojekyll'],
+    [`${releaseDir}/assets`, '/assets'],
+    [`${releaseDir}/index.html`, '/index.html'],
+  ]);
+});
+
 test('manifest verification fails the run when Sirv is missing a file', async () => {
   const siteDir = createTempSite({
     'index.html': '<html></html>',

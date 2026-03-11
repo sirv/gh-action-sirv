@@ -1,7 +1,7 @@
 {
   "name": "gh-action-sirv",
   "description": "Upload directory to Sirv",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "main": "index.js",
   "license": "MIT",
   "repository": "https://github.com/IgorVaryvoda/gh-action-sirv",

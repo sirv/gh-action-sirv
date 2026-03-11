@@ -53,6 +53,8 @@ with:
 
 `staged` mode uploads to a path like `/docs.__releases/<release-id>`, verifies the uploaded files, renames the current live folder to `/docs.__backups/<release-id>`, and then promotes the staged release to `/docs`.
 
+If `output_dir: /`, staged deploys switch the site by moving the build's top-level root entries such as `/.nojekyll`, `/assets`, `/img`, and `/index.html`. Sirv does not allow renaming `/` itself, so root deploys cannot use a single folder swap.
+
 ## Breaking changes in v2
 
 - `verify` defaults to `manifest`, so jobs can now fail where older versions would report success after incomplete Sirv uploads.
@@ -91,6 +93,8 @@ Uploads straight to the live path. If `purge: true`, the action recursively list
 ### `staged`
 
 Uploads the build to a separate release folder first. The live path is only changed after the staged release passes verification. This is the safer mode for Docusaurus and other static sites with hashed assets.
+
+For `output_dir: /`, the action swaps the build's top-level root entries one by one instead of renaming `/`.
 
 ## Failure behavior
 
