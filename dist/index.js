@@ -418,32 +418,37 @@ function createAction(deps) {
     }
 
     const files = [];
-    const queue = [normalizedRoot];
+    let dirsToRead = [normalizedRoot];
 
-    while (queue.length > 0) {
-      const currentDir = queue.shift();
-      let continuation = null;
+    while (dirsToRead.length > 0) {
+      const nextDirs = [];
 
-      do {
-        const response = await withRetry(
-          () => getSirvDirEntries(currentDir, continuation),
-          `READDIR ${currentDir}`
-        );
+      await mapWithConcurrency(dirsToRead, maxConcurrency, async (currentDir) => {
+        let continuation = null;
 
-        for (const entry of response.contents) {
-          const entryPath = joinRemotePath(currentDir, entry.filename);
-          if (entry.isDirectory) {
-            queue.push(entryPath);
-          } else {
-            files.push({
-              ...entry,
-              filename: entryPath,
-            });
+        do {
+          const response = await withRetry(
+            () => getSirvDirEntries(currentDir, continuation),
+            `READDIR ${currentDir}`
+          );
+
+          for (const entry of response.contents) {
+            const entryPath = joinRemotePath(currentDir, entry.filename);
+            if (entry.isDirectory) {
+              nextDirs.push(entryPath);
+            } else {
+              files.push({
+                ...entry,
+                filename: entryPath,
+              });
+            }
           }
-        }
 
-        continuation = response.continuation;
-      } while (continuation);
+          continuation = response.continuation;
+        } while (continuation);
+      });
+
+      dirsToRead = nextDirs;
     }
 
     return files;
@@ -6503,6 +6508,13 @@ catch (error) {
   useNativeURL = error.code === "ERR_INVALID_URL";
 }
 
+// HTTP headers to drop across HTTP/HTTPS and domain boundaries
+var sensitiveHeaders = [
+  "Authorization",
+  "Proxy-Authorization",
+  "Cookie",
+];
+
 // URL fields to preserve in copy operations
 var preservedUrlFields = [
   "auth",
@@ -6583,6 +6595,11 @@ function RedirectableRequest(options, responseCallback) {
         cause : new RedirectionError({ cause: cause }));
     }
   };
+
+  // Create filter for sensitive HTTP headers
+  this._headerFilter = new RegExp("^(?:" +
+      sensitiveHeaders.concat(options.sensitiveHeaders).map(escapeRegex).join("|") +
+    ")$", "i");
 
   // Perform the first request
   this._performRequest();
@@ -6767,6 +6784,9 @@ RedirectableRequest.prototype._sanitizeOptions = function (options) {
   if (!options.headers) {
     options.headers = {};
   }
+  if (!isArray(options.sensitiveHeaders)) {
+    options.sensitiveHeaders = [];
+  }
 
   // Since http.request treats host as an alias of hostname,
   // but the url module interprets host as hostname plus port,
@@ -6949,7 +6969,7 @@ RedirectableRequest.prototype._processResponse = function (response) {
      redirectUrl.protocol !== "https:" ||
      redirectUrl.host !== currentHost &&
      !isSubdomain(redirectUrl.host, currentHost)) {
-    removeMatchingHeaders(/^(?:(?:proxy-)?authorization|cookie)$/i, this._options.headers);
+    removeMatchingHeaders(this._headerFilter, this._options.headers);
   }
 
   // Evaluate the beforeRedirect callback
@@ -7142,6 +7162,10 @@ function isSubdomain(subdomain, domain) {
   return dot > 0 && subdomain[dot] === "." && subdomain.endsWith(domain);
 }
 
+function isArray(value) {
+  return value instanceof Array;
+}
+
 function isString(value) {
   return typeof value === "string" || value instanceof String;
 }
@@ -7156,6 +7180,10 @@ function isBuffer(value) {
 
 function isURL(value) {
   return URL && value instanceof URL;
+}
+
+function escapeRegex(regex) {
+  return regex.replace(/[\]\\/()*+?.$]/g, "\\$&");
 }
 
 // Exports
